@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "storageobject"
+version = "1.0.0"
+description = "Ein thread-sicherer In-Memory Speicher, basierend auf Python-Dictionaries."
+readme = "README.md"
+requires-python = ">=3.6"
+license = { text = "MIT License" }
+authors = [
+    { name = "Mogduz", email = "deine.email@beispiel.de" }
+]
+keywords = ["storage", "thread-safe", "in-memory", "dictionary", "cache"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent"
+]
+urls = { Homepage = "https://github.com/dein-github-benutzername/storageobject" }
