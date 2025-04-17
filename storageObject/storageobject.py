@@ -1,7 +1,7 @@
 """
 File: storageobject.py
 Author: Mogduz
-Created: 2025-04-12
+Created: 2025-04-17
 Description: 
     The StorageObject class provides a thread-safe in-memory storage mechanism that encapsulates
     a Python dictionary. It is designed to support basic operations for setting, retrieving, and 
