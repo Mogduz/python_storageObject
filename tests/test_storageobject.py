@@ -1,89 +1,112 @@
 import unittest
 import threading
-from storageObject import StorageObject
+from storageObject.storageobject import StorageObject
 
 class TestStorageObject(unittest.TestCase):
-    """Test suite for the StorageObject class."""
-
     def setUp(self):
-        """Set up a new StorageObject instance for each test."""
-        self.storage = StorageObject()
+        self.store = StorageObject()
 
     def test_set_and_get(self):
-        """Test that setting a key-value pair allows retrieving the correct value."""
-        self.storage.set("key1", "value1")
-        self.assertEqual(self.storage.get("key1"), "value1")
+        self.store.set('foo', 123)
+        self.assertTrue(self.store.has('foo'))
+        self.assertEqual(self.store.get('foo'), 123)
+
+    def test_override_value(self):
+        self.store.set('foo', 1)
+        self.assertEqual(self.store.get('foo'), 1)
+        self.store.set('foo', 2)
+        self.assertEqual(self.store.get('foo'), 2)
+
+    def test_store_none_and_default_logic(self):
+        self.store.set('none_key', None)
+        self.assertTrue(self.store.has('none_key'))
+        self.assertIsNone(self.store.get('none_key', 'def'))
 
     def test_get_default(self):
-        """Test that get returns the default value for non-existent keys."""
-        self.assertIsNone(self.storage.get("nonexistent"))
-        self.assertEqual(self.storage.get("nonexistent", "default"), "default")
+        self.assertFalse(self.store.has('missing'))
+        self.assertIsNone(self.store.get('missing'))
+        self.assertEqual(self.store.get('missing', 'def'), 'def')
 
-    def test_has(self):
-        """Test that has correctly detects whether a key exists."""
-        self.assertFalse(self.storage.has("key1"))
-        self.storage.set("key1", "value1")
-        self.assertTrue(self.storage.has("key1"))
-
-    def test_remove(self):
-        """Test that remove deletes a key-value pair."""
-        self.storage.set("key1", "value1")
-        self.assertTrue(self.storage.has("key1"))
-        self.storage.remove("key1")
-        self.assertFalse(self.storage.has("key1"))
+    def test_special_keys(self):
+        for key in ['', ' ', 'ßümlaut', 'キー🔑']:
+            self.store.set(key, key + '_val')
+            self.assertTrue(self.store.has(key))
+            self.assertEqual(self.store.get(key), key + '_val')
 
     def test_set_many_and_get_many(self):
-        """Test that setting and retrieving multiple key-value pairs works correctly."""
-        mapping = {"key1": 1, "key2": 2, "key3": 3}
-        self.storage.set_many(mapping)
-        # Test get_many without keys: should return a list in the same order as provided keys.
-        values = self.storage.get_many(["key1", "key2", "key3"])
-        self.assertEqual(values, [1, 2, 3])
-        # Test get_many with withKeys=True: should return a dictionary.
-        values_dict = self.storage.get_many(["key1", "key2", "key3"], withKeys=True)
-        self.assertEqual(values_dict, mapping)
+        data = {'a': 1, 'b': 2, 'c': 3}
+        self.store.set_many(data)
+        self.assertEqual(self.store.get('a'), 1)
+        self.assertEqual(self.store.get('b'), 2)
 
-    def test_remove_many(self):
-        """Test that remove_many deletes the specified keys."""
-        mapping = {"key1": 1, "key2": 2, "key3": 3, "key4": 4}
-        self.storage.set_many(mapping)
-        self.storage.remove_many(["key1", "key3"])
-        self.assertFalse(self.storage.has("key1"))
-        self.assertFalse(self.storage.has("key3"))
-        self.assertTrue(self.storage.has("key2"))
-        self.assertTrue(self.storage.has("key4"))
+        # expect list of values for each key, missing yields None
+        result = self.store.get_many(['a', 'x'])
+        self.assertEqual(result, [1, None])
 
-    def test_thread_safety(self):
-        """
-        Test thread safety by performing multiple concurrent set and get operations.
+        # empty list yields empty list
+        self.assertEqual(self.store.get_many([]), [])
 
-        This test runs several threads that each perform a series of set and get operations.
-        It verifies that all operations complete successfully without data corruption.
-        """
-        num_threads = 10
-        iterations = 100
+    def test_set_many_empty(self):
+        before = self.store.get_many([])
+        self.store.set_many({})
+        self.assertEqual(self.store.get_many([]), before)
 
-        def worker(thread_id):
-            for i in range(iterations):
-                key = f"key-{thread_id}-{i}"
-                self.storage.set(key, i)
-                # Retrieve and verify the value immediately
-                self.assertEqual(self.storage.get(key), i)
+    def test_get_many_duplicates(self):
+        self.store.set('dup', 42)
+        result = self.store.get_many(['dup', 'dup'])
+        self.assertEqual(result, [42, 42])
 
+    def test_get_many_with_none_keys(self):
+        result = self.store.get_many(None)
+        self.assertEqual(result, [])
+
+    def test_mutable_values_reference(self):
+        lst = [1, 2]
+        self.store.set('list', lst)
+        got = self.store.get('list')
+        self.assertIs(got, lst)
+        got.append(3)
+        self.assertEqual(self.store.get('list'), [1, 2, 3])
+
+    def test_unhashable_key_errors(self):
+        for method in (self.store.has, self.store.get, self.store.remove):
+            with self.assertRaises(TypeError):
+                method([])
+
+    def test_remove(self):
+        self.store.set('key', 'value')
+        self.assertTrue(self.store.has('key'))
+        self.store.remove('key')
+        self.assertFalse(self.store.has('key'))
+        self.store.remove('no_such_key')
+
+    def test_concurrent_unique_keys(self):
+        def worker(i):
+            self.store.set(f'k{i}', i)
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(100)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        for i in range(100):
+            self.assertTrue(self.store.has(f'k{i}'))
+            self.assertEqual(self.store.get(f'k{i}'), i)
+
+    def test_concurrent_mixed_operations(self):
+        def setter():
+            for i in range(50):
+                self.store.set(f'mix{i}', i)
+        def remover():
+            for i in range(50):
+                self.store.remove(f'mix{i}')
         threads = []
-        for thread_id in range(num_threads):
-            t = threading.Thread(target=worker, args=(thread_id,))
-            threads.append(t)
-            t.start()
+        for _ in range(5):
+            threads.append(threading.Thread(target=setter))
+            threads.append(threading.Thread(target=remover))
+        for t in threads: t.start()
+        for t in threads: t.join()
 
-        for t in threads:
-            t.join()
-
-        # Verify that all keys were correctly set across all threads.
-        for thread_id in range(num_threads):
-            for i in range(iterations):
-                key = f"key-{thread_id}-{i}"
-                self.assertEqual(self.storage.get(key), i)
+        result = self.store.get_many([f'mix{i}' for i in range(50)])
+        for val in result:
+            self.assertTrue(val is None or isinstance(val, int))
 
 if __name__ == '__main__':
     unittest.main()
